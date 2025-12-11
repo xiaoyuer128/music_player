@@ -146,17 +146,19 @@ def extract_metadata(file_path: str):
 
 
 # 3. 上传歌曲 (增加了 user 依赖，只有登录才能传)
+# backend/app/main.py
+
 @app.post("/songs/")
 async def add_song(
-        title: str = Form(...),
-        artist: str = Form(...),
         file: UploadFile = File(...),
         session: Session = Depends(get_session),
-        current_user: User = Depends(get_current_user)  # <--- 关键：只有登录用户才能访问
+        current_user: User = Depends(get_current_user)
 ):
+    # 1. 验证文件格式
     if not file.filename.endswith((".mp3", ".wav", ".flac")):
         raise HTTPException(status_code=400, detail="格式不支持")
 
+    # 2. 保存文件到硬盘
     file_uuid = str(uuid4())
     file_ext = file.filename.split(".")[-1]
     saved_filename = f"{file_uuid}.{file_ext}"
@@ -165,14 +167,29 @@ async def add_song(
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    # 3. 🌟 核心修改：调用现有的 extract_metadata 函数提取信息
+    # 注意：extract_metadata 函数你之前的代码里已经定义好了，直接用即可
+    metadata = extract_metadata(file_path)
+
+    # 4. 智能判断：如果提取不到元数据，就用文件名兜底
+    # 去掉文件后缀作为默认标题
+    filename_no_ext = file.filename.rsplit('.', 1)[0]
+
+    final_title = metadata.get("title") or filename_no_ext
+    final_artist = metadata.get("artist") or "未知艺术家"
+    final_cover = metadata.get("cover_url")  # 如果提取到了封面，会返回路径
+    final_duration = int(metadata.get("duration", 0))
+
     web_url = f"/static/music/{saved_filename}"
 
-    # 存入数据库时，记录 owner_id
+    # 5. 存入数据库
     new_song = Song(
-        title=title,
-        artist=artist,
+        title=final_title,
+        artist=final_artist,
         url=web_url,
-        owner_id=current_user.id  # <--- 记录是谁传的
+        cover_image=final_cover,  # 存入提取到的封面
+        duration=final_duration,  # 存入时长
+        owner_id=current_user.id
     )
 
     session.add(new_song)

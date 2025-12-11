@@ -42,27 +42,21 @@
         </div>
 
         <div class="upload-area">
-          <h3>上传新歌</h3>
-          <el-form label-position="top">
-            <el-form-item>
-              <el-input v-model="uploadForm.title" placeholder="歌名" prefix-icon="Headset" />
-            </el-form-item>
-            <el-form-item>
-              <el-input v-model="uploadForm.artist" placeholder="歌手" prefix-icon="User" />
-            </el-form-item>
-
-            <el-upload
-              class="upload-box"
-              drag
-              action=""
-              :http-request="handleUpload"
-              :show-file-list="false"
-            >
-              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-              <div class="el-upload__text">拖拽 mp3 到此处</div>
-            </el-upload>
-          </el-form>
-        </div>
+  <h3>上传新歌</h3>
+  <el-upload
+    class="upload-box"
+    drag
+    action=""
+    :http-request="handleUpload"
+    :show-file-list="false"
+    :disabled="isUploading"
+  >
+    <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+    <div class="el-upload__text">
+       {{ isUploading ? '正在分析...' : '拖拽 MP3 自动识别' }}
+    </div>
+  </el-upload>
+</div>
       </el-aside>
 
       <el-main class="glass-content">
@@ -134,17 +128,48 @@
             </el-button>
         </el-tooltip>
       </div>
+      <div class="progress-box">
+  <span class="time-text">{{ formatTime(currentTime) }}</span>
 
-      <audio
-        ref="audioPlayer"
-        controls
-        autoplay
-        :src="currentSong.url"
-        class="custom-audio"
-        @play="isPlaying = true"
-        @pause="isPlaying = false"
-        @ended="autoNext"
-      ></audio>
+  <el-slider
+    v-model="currentTime"
+    :max="duration"
+    @change="seekAudio"
+    @input="isDragging = true"
+    :show-tooltip="false"
+    size="small"
+  />
+
+  <span class="time-text">{{ formatTime(duration) }}</span>
+</div>
+
+<div class="volume-box">
+    <el-icon><Microphone /></el-icon> <el-slider v-model="volume" :max="1" :step="0.01" @input="setVolume" style="width: 80px; margin-left: 10px"/>
+</div>
+
+<audio
+  ref="audioPlayer"
+  :src="currentSong.url"
+  autoplay
+  style="display: none;"
+  @play="isPlaying = true"
+  @pause="isPlaying = false"
+  @ended="autoNext"
+  @timeupdate="onTimeUpdate"
+  @loadedmetadata="onLoadedMetadata"
+></audio>
+
+
+<!--      <audio-->
+<!--        ref="audioPlayer"-->
+<!--        controls-->
+<!--        autoplay-->
+<!--        :src="currentSong.url"-->
+<!--        class="custom-audio"-->
+<!--        @play="isPlaying = true"-->
+<!--        @pause="isPlaying = false"-->
+<!--        @ended="autoNext"-->
+<!--      ></audio>-->
     </div>
   </div>
 </template>
@@ -161,14 +186,52 @@ const isLoggedIn = ref(false)
 const isRegisterMode = ref(false)
 const isLoading = ref(false)
 const authForm = ref({ username: '', password: '' })
-
+const isUploading = ref(false)
 const songList = ref([])
-const uploadForm = ref({ title: '', artist: '' })
+// const uploadForm = ref({ title: '', artist: '' })
 const currentSong = ref({})
-
 // --- 播放状态 ---
 const isPlaying = ref(false)
 const audioPlayer = ref(null)
+const currentTime = ref(0) // 当前播放秒数
+const duration = ref(0)    // 总时长秒数
+const volume = ref(1.0)    // 音量 0.0 ~ 1.0
+const isDragging = ref(false) // 防止拖拽时进度条乱跳
+
+
+// 2. 监听音频元数据加载（获取总时长）
+const onLoadedMetadata = () => {
+  duration.value = audioPlayer.value.duration
+}
+
+// 3. 监听播放进度更新
+const onTimeUpdate = () => {
+  // 如果用户正在拖拽，就不要自动更新进度条，否则会闪烁
+  if (!isDragging.value) {
+    currentTime.value = audioPlayer.value.currentTime
+  }
+}
+
+// 4. 用户拖拽进度条结束时触发
+const seekAudio = (val) => {
+  audioPlayer.value.currentTime = val
+  isDragging.value = false
+}
+
+// 5. 调节音量
+const setVolume = (val) => {
+  audioPlayer.value.volume = val
+}
+
+// 6. 时间格式化工具 (把 125秒 变成 "02:05")
+const formatTime = (seconds) => {
+  if (!seconds) return '00:00'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
+
 
 // 🔥 新增：播放模式 'sequence'(顺序) | 'loop'(单曲循环) | 'random'(随机)
 const playMode = ref('sequence')
@@ -249,21 +312,27 @@ const fetchSongs = async () => {
     console.error(error)
   }
 }
+// src/App.vue <script setup> 内部
 
+
+
+// 2.  handleUpload 函数
 const handleUpload = async (options) => {
-  if (!uploadForm.value.title || !uploadForm.value.artist) return ElMessage.warning('请先填写信息')
+  isUploading.value = true // 开始转圈圈或显示状态
+
   const formData = new FormData()
   formData.append('file', options.file)
-  formData.append('title', uploadForm.value.title)
-  formData.append('artist', uploadForm.value.artist)
+  // 注意：这里不再 append title 和 artist 了，后端会自己搞定
 
   try {
     await axios.post('/songs/', formData)
-    ElMessage.success('上传成功')
-    uploadForm.value = { title: '', artist: '' }
-    fetchSongs()
+    ElMessage.success('上传成功！已自动识别歌曲信息')
+    fetchSongs() // 刷新列表
   } catch (error) {
-    ElMessage.error('上传失败')
+    console.error(error)
+    ElMessage.error(error.response?.data?.detail || '上传失败')
+  } finally {
+    isUploading.value = false // 结束状态
   }
 }
 
@@ -397,7 +466,33 @@ body { margin: 0; font-family: sans-serif; background-color: #121212; color: whi
 .p-title { font-weight: bold; font-size: 14px; }
 .p-artist { font-size: 12px; color: #aaa; }
 .custom-audio { flex: 1; height: 40px; outline: none; margin-left: 20px; }
-
+/* 进度条区域 */
+.progress-box {
+  flex: 1; /* 占据剩余空间 */
+  display: flex;
+  align-items: center;
+  margin: 0 20px;
+}
+.time-text {
+  font-size: 12px;
+  color: #ccc;
+  width: 40px;
+  text-align: center;
+  margin: 0 10px;
+}
+/* 音量区域 */
+.volume-box {
+    display: flex;
+    align-items: center;
+    margin-right: 20px;
+}
+/* 覆盖 Element Slider 默认样式，让它更细更精致（可选） */
+.el-slider__bar {
+    background-color: #ff9966; /* 你的主题橙色 */
+}
+.el-slider__button {
+    border-color: #ff9966;
+}
 /* 播放控制按钮区 */
 .player-controls { margin: 0 20px; display: flex; align-items: center; gap: 15px; } /* 增加了 gap 间距 */
 .player-actions { margin-right: 20px; }
