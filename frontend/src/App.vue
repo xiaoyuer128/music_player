@@ -61,13 +61,30 @@
 
       <el-main class="glass-content">
         <div class="content-header">
-          <h2>全站歌单 <el-tag effect="dark" round size="small">{{ getModeName() }}</el-tag></h2>
-          <el-button circle icon="Refresh" @click="fetchSongs" />
+    <h2>全站歌单 <el-tag effect="dark" round size="small">{{ getModeName() }}</el-tag></h2>
+
+    <div class="header-center">
+      <div class="search-wrapper" :class="{ 'active': isSearchActive }">
+        <div class="search-icon-btn" @click="isSearchActive = !isSearchActive">
+           <el-icon :size="20"><Search /></el-icon>
         </div>
+        <input
+           v-model="searchQuery"
+           class="search-input"
+           type="text"
+           placeholder="搜索歌名或歌手..."
+        />
+        <span v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">×</span>
+      </div>
+    </div>
+
+    <el-button circle icon="Refresh" @click="fetchSongs" />
+  </div>
+
 
         <div class="song-grid">
            <div
-             v-for="song in songList"
+             v-for="song in filteredSongList"
              :key="song.id"
              class="song-card"
              :class="{ 'active-card': currentSong.id === song.id }"
@@ -82,7 +99,11 @@
               <div class="song-artist">{{ song.artist }}</div>
             </div>
             <el-button class="delete-btn" type="danger" icon="Delete" circle size="small" @click.stop="deleteSong(song.id)" />
-          </div>
+
+           </div>
+          <div v-if="filteredSongList.length === 0" class="empty-state">
+        没有找到相关歌曲
+     </div>
         </div>
       </el-main>
     </el-container>
@@ -96,23 +117,33 @@
         </div>
       </div>
 
-      <div class="player-controls">
-        <el-button circle icon="ArrowLeft" @click="prevSong" />
+     <div class="player-controls">
 
-        <el-button
-           circle
-           size="large"
-           type="primary"
-           @click="togglePlay"
-           class="play-btn"
-        >
-          <el-icon size="24">
-            <component :is="isPlaying ? 'VideoPause' : 'VideoPlay'" />
-          </el-icon>
-        </el-button>
+  <el-button circle size="default" @click="prevSong" class="control-btn">
+    <el-icon :size="18"><ArrowLeft /></el-icon>
+  </el-button>
 
-        <el-button circle icon="ArrowRight" @click="nextSong(true)" />
-      </div>
+  <el-button
+   circle
+   size="large"
+   type="primary"
+   @click="togglePlay"
+   class="play-btn"
+>
+  <el-icon v-if="isPlaying" :size="28" color="#fff">
+    <VideoPause />
+  </el-icon>
+
+  <el-icon v-else :size="28" color="#fff">
+    <VideoPlay />
+  </el-icon>
+</el-button>
+
+  <el-button circle size="default" @click="nextSong(true)" class="control-btn">
+    <el-icon :size="18"><ArrowRight /></el-icon>
+  </el-button>
+
+</div>
 
       <div class="player-actions">
         <el-tooltip :content="getModeName()" placement="top">
@@ -175,11 +206,30 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted,computed } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 // 🔥 引入新图标：ArrowLeft, ArrowRight, Sort (顺序), Connection (随机)
-import { Headset, User, UploadFilled, VideoPlay, VideoPause, Delete, Refresh, Lock, ArrowLeft, ArrowRight, Sort, Connection } from '@element-plus/icons-vue'
+// import { Headset, User, UploadFilled, VideoPlay, Search ,ArrowLeft, ArrowRight,  ideoPause} from '@element-plus/icons-vue'
+// 找到 src/App.vue 顶部的 icons 引入代码，换成下面这一大段：
+import {
+  Headset,
+  User,
+  UploadFilled,
+  VideoPlay,
+  VideoPause,
+  Delete,
+  Refresh,
+  Lock,
+  ArrowLeft,   // 👈 这次用到的
+  ArrowRight,  // 👈 这次用到的
+  Sort,
+  Connection,
+  Search,      // 👈 上次搜索功能用到的
+  Microphone   // 👈 之前音量功能可能用到的
+} from '@element-plus/icons-vue'
+
+
 
 // --- 基础状态 ---
 const isLoggedIn = ref(false)
@@ -198,11 +248,19 @@ const duration = ref(0)    // 总时长秒数
 const volume = ref(1.0)    // 音量 0.0 ~ 1.0
 const isDragging = ref(false) // 防止拖拽时进度条乱跳
 
+const isSearchActive = ref(false) // 控制搜索框是否展开
+const searchQuery = ref('')       // 搜索关键词
+
+// 🔥 新增：播放模式 'sequence'(顺序) | 'loop'(单曲循环) | 'random'(随机)
+const playMode = ref('sequence')
+
+
 
 // 2. 监听音频元数据加载（获取总时长）
 const onLoadedMetadata = () => {
   duration.value = audioPlayer.value.duration
 }
+
 
 // 3. 监听播放进度更新
 const onTimeUpdate = () => {
@@ -212,16 +270,33 @@ const onTimeUpdate = () => {
   }
 }
 
+
+// 创建一个计算属性：如果有搜索词，就过滤列表；否则显示全部
+const filteredSongList = computed(() => {
+  if (!searchQuery.value) return songList.value
+
+  const query = searchQuery.value.toLowerCase().trim()
+  return songList.value.filter(song => {
+    // 同时也搜索歌手名，体验更好
+    return song.title.toLowerCase().includes(query) ||
+           song.artist.toLowerCase().includes(query)
+  })
+})
+
+
+
 // 4. 用户拖拽进度条结束时触发
 const seekAudio = (val) => {
   audioPlayer.value.currentTime = val
   isDragging.value = false
 }
 
+
 // 5. 调节音量
 const setVolume = (val) => {
   audioPlayer.value.volume = val
 }
+
 
 // 6. 时间格式化工具 (把 125秒 变成 "02:05")
 const formatTime = (seconds) => {
@@ -231,10 +306,6 @@ const formatTime = (seconds) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
 }
 
-
-
-// 🔥 新增：播放模式 'sequence'(顺序) | 'loop'(单曲循环) | 'random'(随机)
-const playMode = ref('sequence')
 
 // --- 认证逻辑 (保持不变) ---
 axios.interceptors.request.use(config => {
@@ -384,7 +455,7 @@ const autoNext = () => {
     } else {
         // 其他模式：切下一首
         nextSong()
-    }
+    }//测试
 }
 
 // 下一曲
@@ -494,10 +565,29 @@ body { margin: 0; font-family: sans-serif; background-color: #121212; color: whi
     border-color: #ff9966;
 }
 /* 播放控制按钮区 */
+.control-btn {
+  background: rgba(255, 255, 255, 0.1) !important; /* 强制半透明背景 */
+  border: none !important;
+  color: #fff !important; /* 强制图标白色 */
+  transition: all 0.2s;
+}
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.1);
+}
+
 .player-controls { margin: 0 20px; display: flex; align-items: center; gap: 15px; } /* 增加了 gap 间距 */
 .player-actions { margin-right: 20px; }
-.play-btn { background: linear-gradient(135deg, #ff9966, #ff5e62); border: none; transition: transform 0.1s; }
-.play-btn:active { transform: scale(0.95); }
+.play-btn {
+  background: linear-gradient(135deg, #1f1f2e, #1f1f2f) !important;
+  border: none !important;
+  transform: scale(1.2); /* 让它比旁边的稍微大一点 */
+  margin: 0 15px; /* 给左右留点距离 */
+  box-shadow: 0 4px 10px rgb(40, 40, 59);
+}
+.play-btn:active {
+  transform: scale(1.1); /* 点击时的按压效果 */
+}
 
 /* 认证界面 */
 .auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); z-index: 2000; display: flex; justify-content: center; align-items: center; }
@@ -507,4 +597,97 @@ body { margin: 0; font-family: sans-serif; background-color: #121212; color: whi
 .toggle-text { margin-top: 20px; color: #aaa; font-size: 14px; }
 .toggle-text span { color: #409EFF; cursor: pointer; margin-left: 5px; }
 .user-info { text-align: center; color: rgba(255,255,255,0.6); margin-bottom: 20px; }
+
+/* --- 🔍 顶部搜索框样式 --- */
+
+/* 让头部布局变成：左(标题)-中(搜索)-右(刷新) */
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  position: relative; /* 只要相对定位即可 */
+}
+
+/* 中间区域容器 */
+.header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center; /* 居中显示 */
+}
+
+/* 搜索条外壳：初始状态是一个圆形的图标按钮大小 */
+.search-wrapper {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 5px;
+  width: 40px; /* 初始宽度只有图标宽 */
+  height: 40px;
+  transition: all 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); /* 弹性动画 */
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+
+/* 激活状态：变宽 */
+.search-wrapper.active {
+  width: 300px; /* 展开后的宽度 */
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+/* 搜索图标 */
+.search-icon-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  flex-shrink: 0; /* 防止被压缩 */
+}
+
+/* 输入框：隐藏原生样式 */
+.search-input {
+  background: transparent;
+  border: none;
+  color: white;
+  outline: none;
+  font-size: 14px;
+  margin-left: 10px;
+  width: 100%;
+  opacity: 0; /* 没展开时隐藏文字 */
+  transition: opacity 0.3s ease;
+}
+
+/* 展开时显示输入框 */
+.search-wrapper.active .search-input {
+  opacity: 1;
+}
+
+/* 占位符颜色 */
+.search-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* 清除按钮 */
+.clear-btn {
+  color: #999;
+  cursor: pointer;
+  padding: 0 8px;
+  font-size: 18px;
+}
+.clear-btn:hover { color: white; }
+
+/* 空状态提示 */
+.empty-state {
+  grid-column: 1 / -1; /* 跨越所有列 */
+  text-align: center;
+  color: rgba(255,255,255,0.4);
+  padding: 50px;
+}
+
 </style>
