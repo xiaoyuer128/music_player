@@ -118,6 +118,7 @@
              class="song-card"
              :class="{ 'active-card': currentSong.id === song.id }"
              @click="playMusic(song)"
+             @contextmenu="openContextMenu($event, song)"
            >
             <div class="card-cover">
               <div class="placeholder-cover"><el-icon size="40"><Headset /></el-icon></div>
@@ -127,15 +128,15 @@
               <div class="song-title">{{ song.title }}</div>
               <div class="song-artist">{{ song.artist }}</div>
             </div>
-             <el-button
-                 class="add-btn"
-                 type="warning"
-                 icon="FolderAdd"
-                 circle
-                 size="small"
-                 @click.stop="openAddToPlaylist(song)"
-             />
-            <el-button class="delete-btn" type="danger" icon="Delete" circle size="small" @click.stop="deleteSong(song.id)" />
+<!--             <el-button-->
+<!--                 class="add-btn"-->
+<!--                 type="warning"-->
+<!--                 icon="FolderAdd"-->
+<!--                 circle-->
+<!--                 size="small"-->
+<!--                 @click.stop="openAddToPlaylist(song)"-->
+<!--             />-->
+<!--            <el-button class="delete-btn" type="danger" icon="Delete" circle size="small" @click.stop="deleteSong(song.id)" />-->
            </div>
 
            <div v-if="filteredSongList.length === 0" class="empty-state">
@@ -283,9 +284,39 @@
             </div>
             <div v-if="myPlaylists.length === 0" style="text-align:center; color:#999; padding:20px;">
               暂无歌单，请先去左侧新建
+            </div>
+          </div>
+        </el-dialog>
+    <div
+        v-show="contextMenu.visible"
+        class="custom-context-menu"
+        :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
+        @click.stop
+    >
+      <div class="menu-header" v-if="contextMenu.song">
+        {{ contextMenu.song.title }}
+      </div>
+
+      <div class="menu-item" @click="playMusic(contextMenu.song); closeContextMenu()">
+        <el-icon><VideoPlay /></el-icon> 立即播放
+      </div>
+
+      <div class="menu-item" @click="openAddToPlaylist(contextMenu.song); closeContextMenu()">
+        <el-icon><FolderAdd /></el-icon> 收藏到歌单
+      </div>
+
+      <div class="menu-divider"></div>
+
+      <div class="menu-item" @click="nextSong(); closeContextMenu()">
+        <el-icon><ArrowRight /></el-icon> 切下一首
+      </div>
+
+      <div class="menu-divider"></div>
+
+      <div class="menu-item delete" @click="deleteSong(contextMenu.song.id); closeContextMenu()">
+        <el-icon><Delete /></el-icon> 删除歌曲
+      </div>
     </div>
-  </div>
-</el-dialog>
 
   </div>
 </template>
@@ -534,7 +565,7 @@ const deleteSong = async (id) => {
                     type: 'warning'
                 }
             )
-            
+
             // 确认后再发请求
             await axios.delete(`/songs/${id}`)
             ElMessage.success('物理删除成功')
@@ -621,6 +652,45 @@ const deletePlaylist = async (playlist, event) => {
 // --- ➕ 添加歌曲到歌单逻辑 (新增) ---
 const showAddDialog = ref(false)   // 控制弹窗显示
 const songToAdd = ref(null)        // 当前要添加的那首歌
+
+// --- 🖱️ 右键菜单逻辑 (新增) ---
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  song: null
+})
+
+// 1. 打开右键菜单
+const openContextMenu = (e, song) => {
+  e.preventDefault() // 阻止浏览器默认菜单
+  contextMenu.value = {
+    visible: true,
+    x: e.clientX,
+    y: e.clientY,
+    song: song
+  }
+}
+
+// 2. 关闭菜单 (点击页面任何其他地方时触发)
+const closeContextMenu = () => {
+  contextMenu.value.visible = false
+}
+
+// 3. 监听全局点击，关闭菜单
+onMounted(() => {
+  // ... 原有的 onMounted 内容 ...
+  document.addEventListener('click', closeContextMenu)
+})
+
+// 别忘了在组件卸载时移除监听，虽然 App.vue 一般不卸载，但这是好习惯
+import { onUnmounted } from 'vue' // 记得在顶部引入 onUnmounted
+onUnmounted(() => {
+  document.removeEventListener('click', closeContextMenu)
+})
+
+
+
 
 // 1. 打开选择弹窗
 const openAddToPlaylist = (song) => {
@@ -1297,7 +1367,66 @@ body { margin: 0; font-family: sans-serif; background-color: #121212; color: whi
   opacity: 1;
 }
 
+/* --- 🖱️ 右键菜单样式 --- */
+.custom-context-menu {
+  position: fixed;
+  z-index: 9999; /* 必须极高，盖住所有东西 */
+  background: rgba(40, 40, 50, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  padding: 5px 0;
+  min-width: 160px;
+  animation: fadeIn 0.1s ease-out;
+}
 
+.menu-header {
+  padding: 8px 15px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 5px;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-item {
+  padding: 10px 15px;
+  font-size: 14px;
+  color: #eee;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background 0.2s;
+}
+
+.menu-item:hover {
+  background: #ff9966; /* 悬停变橙色 */
+  color: white;
+}
+
+.menu-item .el-icon {
+  margin-right: 10px;
+  font-size: 16px;
+}
+
+.menu-item.delete:hover {
+  background: #ff4d4f; /* 删除项悬停变红 */
+}
+
+.menu-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.1);
+  margin: 5px 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
 
 
 
