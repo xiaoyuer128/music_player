@@ -16,7 +16,7 @@ from mutagen.id3 import ID3, APIC, TIT2, TPE1, TALB
 
 # 引入我们刚才写好的模块
 from .core.database import create_db_and_tables, get_session
-from .models import User, Song
+from .models import User, Song, Playlist, PlaylistSongLink
 from .core.security import get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 
 app = FastAPI()
@@ -249,3 +249,146 @@ async def delete_song(
     session.commit()
 
     return {"ok": True}
+
+
+# --- 🎵 歌单管理接口 (新增) ---
+
+# 6. 创建新歌单
+@app.post("/playlists/", response_model=Playlist)
+async def create_playlist(
+        title: str = Form(...),
+        description: str = Form(None),
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_user)
+):
+    # 创建歌单对象，并标记主人是当前用户
+    new_playlist = Playlist(title=title, description=description, owner_id=current_user.id)
+    session.add(new_playlist)
+    session.commit()
+    session.refresh(new_playlist)
+    return new_playlist
+
+
+# 7. 获取“我”的所有歌单
+@app.get("/playlists/", response_model=List[Playlist])
+async def get_my_playlists(
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_user)
+):
+    # 利用 SQLModel 的关系字段，直接返回用户的 playlists
+    # 如果报错，说明 relationship 定义有问题，但根据你之前上传的 models.py 应该是没问题的
+    return current_user.playlists
+
+
+# 8. 把歌曲添加到歌单
+@app.post("/playlists/{playlist_id}/songs/{song_id}")
+async def add_song_to_playlist(
+        playlist_id: int,
+        song_id: int,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_user)
+):
+    # 1. 先找歌单
+    playlist = session.get(Playlist, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="歌单不存在")
+
+    # 2. 只有歌单的主人才能往里加歌
+    if playlist.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="你没有权限修改此歌单")
+
+    # 3. 找歌曲
+    song = session.get(Song, song_id)
+    if not song:
+        raise HTTPException(status_code=404, detail="歌曲不存在")
+
+    # 4. 检查是否已经在歌单里了 (避免重复添加)
+    # 我们查中间表
+    statement = select(PlaylistSongLink).where(
+        PlaylistSongLink.playlist_id == playlist_id,
+        PlaylistSongLink.song_id == song_id
+    )
+    link = session.exec(statement).first()
+    if link:
+        return {"message": "歌曲已在歌单中", "ok": True}
+
+    # 5. 添加关联
+    new_link = PlaylistSongLink(playlist_id=playlist_id, song_id=song_id)
+    session.add(new_link)
+    session.commit()
+
+    return {"message": "添加成功", "ok": True}
+
+
+# 9. 获取某个歌单里的所有歌曲
+@app.get("/playlists/{playlist_id}/songs", response_model=List[Song])
+async def get_playlist_songs(
+        playlist_id: int,
+        session: Session = Depends(get_session)
+):
+    playlist = session.get(Playlist, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="歌单不存在")
+
+    return playlist.songs
+
+
+# --- 🗑️ 歌单删除逻辑 (新增) ---
+
+# 10. 删除整个歌单
+@app.delete("/playlists/{playlist_id}")
+async def delete_playlist(
+        playlist_id: int,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_user)
+):
+    # 1. 找歌单
+    playlist = session.get(Playlist, playlist_id)
+    if not playlist:
+        raise HTTPException(status_code=404, detail="歌单不存在")
+
+    # 2. 验证权限
+    if playlist.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="你没有权限删除此歌单")
+
+    # 3. 删除歌单内的关联记录 (中间表)
+    # 虽然数据库可能有级联删除，但手动清空更安全
+    statement = select(PlaylistSongLink).where(PlaylistSongLink.playlist_id == playlist_id)
+    links = session.exec(statement).all()
+    for link in links:
+        session.delete(link)
+
+    # 4. 删除歌单本身
+    session.delete(playlist)
+    session.commit()
+    return {"ok": True}
+
+
+# 11. 从歌单里移除某一首歌 (注意：不是物理删除歌曲，只是解除关系)
+@app.delete("/playlists/{playlist_id}/songs/{song_id}")
+async def remove_song_from_playlist(
+        playlist_id: int,
+        song_id: int,
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_user)
+):
+    # 1. 验证歌单权限
+    playlist = session.get(Playlist, playlist_id)
+    if not playlist or playlist.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="没有权限")
+
+    # 2. 找关联记录
+    statement = select(PlaylistSongLink).where(
+        PlaylistSongLink.playlist_id == playlist_id,
+        PlaylistSongLink.song_id == song_id
+    )
+    link = session.exec(statement).first()
+
+    # 3. 删除关联
+    if link:
+        session.delete(link)
+        session.commit()
+
+    return {"ok": True}
+
+
