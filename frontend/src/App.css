@@ -276,6 +276,8 @@ body { margin: 0; font-family: sans-serif; background-color: #121212; color: whi
   display: flex;
   height: 100%;
   padding-top: 60px; /* 避开关闭按钮 */
+  position: relative;
+  z-index: 10; /* 🔥 关键：比画布高，确保歌词能被看见、能滚动 */
 }
 
 /* 左侧封面区 */
@@ -540,3 +542,20 @@ body { margin: 0; font-family: sans-serif; background-color: #121212; color: whi
   from { opacity: 0; transform: scale(0.95); }
   to { opacity: 1; transform: scale(1); }
 }
+
+.audio-visualizer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 120px; /* 🔥 修改：高度改小，只在底部跳动 */
+  z-index: 1;    /* 在背景之上，但在内容之下 */
+  pointer-events: none; /* 让鼠标能穿透它 */
+  opacity: 0.8;
+  /* 加个渐变遮罩，让动效顶部柔和消失，不干扰文字 */
+  mask-image: linear-gradient(to top, black 0%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to top, black 0%, transparent 100%);
+}
+
+
+

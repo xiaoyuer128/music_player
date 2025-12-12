@@ -114,7 +114,7 @@
 
         <div class="song-grid">
            <div
-             v-for="song in filteredSongList"
+             v-for="song in songList"
              :key="song.id"
              class="song-card"
              :class="{ 'active-card': currentSong.id === song.id }"
@@ -140,7 +140,7 @@
 <!--            <el-button class="delete-btn" type="danger" icon="Delete" circle size="small" @click.stop="deleteSong(song.id)" />-->
            </div>
 
-           <div v-if="filteredSongList.length === 0" class="empty-state">
+           <div v-if="songList.length === 0" class="empty-state">
               没有找到相关歌曲
            </div>
         </div>
@@ -180,6 +180,7 @@
              <div style="height: 50vh;"></div>
           </div>
         </div>
+        <canvas ref="visualizerCanvas" class="audio-visualizer"></canvas>
       </div>
     </transition>
 
@@ -255,6 +256,7 @@
 
       <audio
         ref="audioPlayer"
+        crossorigin="anonymous"
         :src="currentSong.url"
         autoplay
         style="display: none;"
@@ -263,6 +265,7 @@
         @ended="autoNext"
         @timeupdate="onTimeUpdate"
         @loadedmetadata="onLoadedMetadata"
+
       ></audio>
 
     </div>

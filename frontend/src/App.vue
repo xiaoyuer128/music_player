@@ -2,29 +2,13 @@
 
 <script setup>
 
-
-import { ref, onMounted,computed } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import axios from 'axios'
-import { ElMessage, ElMessageBox} from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  FolderAdd,
-  Headset,
-  User,
-  UploadFilled,
-  VideoPlay,
-  VideoPause,
-  Delete,
-  Refresh,
-  Lock,
-  ArrowLeft,   // 👈 这次用到的
-  ArrowRight,  // 👈 这次用到的
-  Sort,
-  Connection,
-  Search,      // 👈 上次搜索功能用到的
-  Microphone,
-  ArrowDown,// 👈 之前音量功能可能用到的
-  Plus,
-  List
+  FolderAdd, Headset, User, UploadFilled, VideoPlay, VideoPause, Delete,
+  Refresh, Lock, ArrowLeft, ArrowRight, Sort, Connection, Search,
+  Microphone, ArrowDown, Plus, List, Edit, ArrowUp // 👈 补上这个！
 } from '@element-plus/icons-vue'
 
 // --- 基础状态 ---
@@ -34,27 +18,46 @@ const isLoading = ref(false)
 const authForm = ref({ username: '', password: '' })
 const isUploading = ref(false)
 const songList = ref([])
-// const uploadForm = ref({ title: '', artist: '' })
 const currentSong = ref({})
+
 // --- 播放状态 ---
 const isPlaying = ref(false)
 const audioPlayer = ref(null)
-const currentTime = ref(0) // 当前播放秒数
-const duration = ref(0)    // 总时长秒数
-const volume = ref(1.0)    // 音量 0.0 ~ 1.0
-const isDragging = ref(false) // 防止拖拽时进度条乱跳
+const currentTime = ref(0)
+const duration = ref(0)
+const volume = ref(1.0)
+const isDragging = ref(false)
 
-const isSearchActive = ref(false) // 控制搜索框是否展开
-const searchQuery = ref('')       // 搜索关键词
+// --- 搜索状态 ---
+const isSearchActive = ref(false)
+const searchQuery = ref('')
 
-// 🔥 新增：播放模式 'sequence'(顺序) | 'loop'(单曲循环) | 'random'(随机)
+// --- 播放模式 ---
 const playMode = ref('sequence')
 
-const showLyricsPage = ref(false) // 控制遮罩层显示
-const parsedLyrics = ref([])      // 解析后的歌词
-const currentLyricIndex = ref(-1) // 当前高亮行
-const lyricsContainer = ref(null) // DOM 引用
+// --- 歌词状态 ---
+const showLyricsPage = ref(false)
+const parsedLyrics = ref([])
+const currentLyricIndex = ref(-1)
+const lyricsContainer = ref(null)
 
+// 🛠️ 手写一个防抖函数 (解决 lodash 报错问题)
+const myDebounce = (fn, delay) => {
+  let timer = null
+  return function(...args) {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(() => {
+      fn.apply(this, args)
+    }, delay)
+  }
+}
+
+// 🎧 监听搜索框 (使用我们手写的 myDebounce)
+watch(searchQuery, myDebounce((newVal) => {
+  fetchSongs(newVal) // 调用后端搜索接口
+}, 300))
+
+// ... (后面的 const sampleLRC = ... 以及其他代码保持不变)
 
 const sampleLRC = `[00:00.00]开始懂了 - 孙燕姿
 [00:04.00]词：姚若龙 曲：李偲菘
@@ -84,18 +87,16 @@ const onLoadedMetadata = () => {
 }
 
 // 创建一个计算属性：如果有搜索词，就过滤列表；否则显示全部
-const filteredSongList = computed(() => {
-  if (!searchQuery.value) return songList.value
-
-  const query = searchQuery.value.toLowerCase().trim()
-  return songList.value.filter(song => {
-    // 同时也搜索歌手名，体验更好
-    return song.title.toLowerCase().includes(query) ||
-           song.artist.toLowerCase().includes(query)
-  })
-})
-
-
+// const filteredSongList = computed(() => {
+//   if (!searchQuery.value) return songList.value
+//
+//   const query = searchQuery.value.toLowerCase().trim()
+//   return songList.value.filter(song => {
+//     // 同时也搜索歌手名，体验更好
+//     return song.title.toLowerCase().includes(query) ||
+//            song.artist.toLowerCase().includes(query)
+//   })
+// })
 
 // 4. 用户拖拽进度条结束时触发
 const seekAudio = (val) => {
@@ -200,6 +201,8 @@ const logout = () => {
 }
 
 onMounted(() => {
+
+
   if (localStorage.getItem('token')) {
     isLoggedIn.value = true
     authForm.value.username = localStorage.getItem('username')
@@ -207,7 +210,85 @@ onMounted(() => {
     fetchPlaylists()
   }
 })
-// ... 其他代码 ...
+
+
+// --- 🎵 音频可视化逻辑 ---
+const visualizerCanvas = ref(null)
+let audioContext = null
+let analyser = null
+let dataArray = null
+let animationId = null
+
+// 初始化可视化器 (注意：必须在用户交互后才能初始化 AudioContext，否则浏览器会阻止)
+const initVisualizer = () => {
+  if (audioContext) return // 防止重复初始化
+  if (!audioPlayer.value) return
+
+  // 1. 创建上下文
+  audioContext = new (window.AudioContext || window.webkitAudioContext)()
+
+  // 2. 创建分析器
+  analyser = audioContext.createAnalyser()
+  analyser.fftSize = 512 // 决定了柱子的数量 (512 / 2 = 256根)
+
+  // 3. 连接音频源 (这里有个坑：MediaElementSource 只能连一次，所以要 try-catch 或者由播放触发)
+  try {
+      const source = audioContext.createMediaElementSource(audioPlayer.value)
+      source.connect(analyser)
+      analyser.connect(audioContext.destination) // 连回扬声器，不然没声音
+  } catch(e) {
+      // 如果已经连过了，就忽略错误
+  }
+
+  // 4. 准备数据容器
+  const bufferLength = analyser.frequencyBinCount
+  dataArray = new Uint8Array(bufferLength)
+
+  // 5. 开始绘制
+  drawVisualizer()
+}
+
+// 绘制循环函数
+const drawVisualizer = () => {
+  animationId = requestAnimationFrame(drawVisualizer)
+
+  if (!showLyricsPage.value || !visualizerCanvas.value) return
+
+  const canvas = visualizerCanvas.value
+  const ctx = canvas.getContext('2d')
+
+  // 1. 适配屏幕宽度，但高度固定为 120 (与 CSS 保持一致)
+  canvas.width = window.innerWidth
+  canvas.height = 120
+
+  analyser.getByteFrequencyData(dataArray)
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  // 2. 调整柱子宽度和间距
+  const barWidth = (canvas.width / dataArray.length) * 2.5
+  let barHeight
+  let x = 0
+
+  for (let i = 0; i < dataArray.length; i++) {
+    // 3. 重新计算高度比例，避免画出界
+    // dataArray[i] 最大是 255，我们把它缩放到 canvas.height 以内
+    // (dataArray[i] / 255) * canvas.height * 0.8 (乘以0.8是为了留点余地)
+    barHeight = (dataArray[i] / 255) * canvas.height * 0.9
+
+    // 渐变色：从底部(热烈)到顶部(透明)
+    const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight)
+    gradient.addColorStop(0, '#ff9966') // 底部颜色
+    gradient.addColorStop(1, 'rgba(255, 94, 98, 0.5)') // 顶部颜色半透明
+
+    ctx.fillStyle = gradient
+
+    // 绘制 (让柱子沉底)
+    ctx.fillRect(x, canvas.height - barHeight, barWidth, barHeight)
+
+    x += barWidth + 1
+  }
+}
 
 // 🔥 新增：根据当前模式返回不同的颜色
 const getModeColor = () => {
@@ -218,18 +299,22 @@ const getModeColor = () => {
 
 // ... fetchSongs 等代码 ...
 // --- 歌曲业务逻辑 ---
-const fetchSongs = async () => {
+// 修改前的 fetchSongs 没有任何参数
+
+// 修改 fetchSongs 支持接收搜索参数
+const fetchSongs = async (query = '') => {
   currentPlaylist.value = null
   try {
-    const res = await axios.get('/songs/')
+    // 这里的 params: { q: query } 会把请求变成 /songs/?q=xxx
+    // 如果 query 是 Event 对象(某些情况下会发生)，要处理一下，或者确保调用时传的是字符串
+    const searchWord = (typeof query === 'string') ? query : ''
+
+    const res = await axios.get('/songs/', { params: { q: searchWord } })
     songList.value = res.data
   } catch (error) {
     console.error(error)
   }
 }
-// src/App.vue <script setup> 内部
-
-
 
 // 2.  handleUpload 函数
 const handleUpload = async (options) => {
@@ -437,7 +522,7 @@ onMounted(() => {
 })
 
 // 别忘了在组件卸载时移除监听，虽然 App.vue 一般不卸载，但这是好习惯
-import { onUnmounted } from 'vue' // 记得在顶部引入 onUnmounted
+
 onUnmounted(() => {
   document.removeEventListener('click', closeContextMenu)
 })
@@ -579,11 +664,12 @@ const parseLRC = (lrcString) => {
 // 🔥 4. 修改 playMusic：切歌时加载歌词
 const playMusic = (song) => {
   if (currentSong.value.id === song.id) {
-    togglePlay()
+    showLyricsPage.value = !showLyricsPage.value
     return
   }
   currentSong.value = song
   isPlaying.value = true
+  showLyricsPage.value = true
 
   // 模拟加载歌词 (真实情况是用 song.lyrics)
   const lrc = song.lyrics || sampleLRC
@@ -627,7 +713,60 @@ const scrollToActiveLyric = () => {
   }
 }
 
+// --- ⌨️ 键盘快捷键逻辑 ---
+const handleKeydown = (e) => {
+  // 1. 如果焦点在输入框里，不要触发快捷键
+  if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return
 
+  switch (e.code) {
+    case 'Space':
+      e.preventDefault() // 防止空格导致页面滚动
+      togglePlay()
+      break
+    case 'ArrowRight':
+      // 快进 5秒 (如果有 Ctrl 则切下一首)
+      if (e.ctrlKey) {
+          nextSong(true)
+      } else {
+          if (audioPlayer.value) audioPlayer.value.currentTime += 5
+          ElMessage.info('快进 5s')
+      }
+      break
+    case 'ArrowLeft':
+      // 快退 5秒
+      if (e.ctrlKey) {
+          prevSong()
+      } else {
+          if (audioPlayer.value) audioPlayer.value.currentTime -= 5
+          ElMessage.info('快退 5s')
+      }
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      // 音量 + 10%
+      if (volume.value < 1) volume.value = Math.min(1, volume.value + 0.1)
+      setVolume(volume.value)
+      break
+    case 'ArrowDown':
+      e.preventDefault()
+      // 音量 - 10%
+      if (volume.value > 0) volume.value = Math.max(0, volume.value - 0.1)
+      setVolume(volume.value)
+      break
+  }
+}
+
+// 在 onMounted 里注册
+onMounted(() => {
+  // ... 原有代码 ...
+  document.addEventListener('keydown', handleKeydown)
+})
+
+// 在 onUnmounted 里卸载
+onUnmounted(() => {
+  // ... 原有代码 ...
+  document.removeEventListener('keydown', handleKeydown)
+})
 
 
 

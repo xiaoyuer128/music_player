@@ -3,7 +3,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
-from sqlmodel import Session, select
+from sqlmodel import Session, select,or_
 from typing import List
 import shutil
 import os
@@ -198,14 +198,27 @@ async def add_song(
     return new_song
 
 
-# 4. 获取歌曲列表 (所有人都可以看，还是只有登录可以看？这里演示所有人可看)
+# 2. 修改获取歌曲列表接口
 @app.get("/songs/", response_model=List[Song])
-async def get_songs(session: Session = Depends(get_session)):
-    # 这里的 Song 定义要确保和 models.py 里的一致
+async def get_songs(
+        session: Session = Depends(get_session),
+        q: str | None = None  # 👈 新增：接收搜索关键词，默认为空
+):
     statement = select(Song)
+
+    # 如果用户传了搜索词，就加筛选条件
+    if q:
+        # statement.where(or_(条件A, 条件B)) 表示 A 或 B 满足一个即可
+        statement = statement.where(
+            or_(
+                Song.title.contains(q),  # 歌名包含 q
+                Song.artist.contains(q)  # 歌手包含 q
+            )
+        )
+
+    # 执行查询
     songs = session.exec(statement).all()
     return songs
-
 
 # 5. 删除歌曲 (只有歌曲的主人才能删！)
 @app.delete("/songs/{song_id}")
