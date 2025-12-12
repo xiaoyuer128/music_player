@@ -1,0 +1,320 @@
+  <div class="main-layout">
+    <div class="background-animation"></div>
+
+    <div v-if="!isLoggedIn" class="auth-overlay">
+      <div class="auth-box glass-content">
+        <h2>{{ isRegisterMode ? '注册账户' : '欢迎登录' }}</h2>
+        <el-form label-position="top">
+          <el-form-item label="用户名">
+            <el-input v-model="authForm.username" prefix-icon="User" />
+          </el-form-item>
+          <el-form-item label="密码">
+            <el-input v-model="authForm.password" type="password" prefix-icon="Lock" />
+          </el-form-item>
+          <el-button
+            type="primary"
+            native-type="button"
+            class="auth-btn"
+            @click.prevent="handleAuth"
+            :loading="isLoading"
+          >
+            {{ isRegisterMode ? '立即注册' : '登录' }}
+          </el-button>
+          <div class="toggle-text">
+            {{ isRegisterMode ? '已有账号？' : '还没有账号？' }}
+            <span @click="isRegisterMode = !isRegisterMode">
+              {{ isRegisterMode ? '去登录' : '去注册' }}
+            </span>
+          </div>
+        </el-form>
+      </div>
+    </div>
+
+    <el-container style="height: 100vh;" v-else>
+      <el-aside width="250px" class="glass-sidebar">
+        <div class="logo-area">
+          <h2>🎧 小鱼儿音乐</h2>
+          <div class="user-info">
+             👋 {{ authForm.username }}
+             <el-button link type="danger" size="small" @click="logout">退出</el-button>
+          </div>
+        </div>
+
+        <div class="upload-area">
+          <h3>上传新歌</h3>
+          <el-upload
+            class="upload-box"
+            drag
+            action=""
+            :http-request="handleUpload"
+            :show-file-list="false"
+            :disabled="isUploading"
+          >
+            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+            <div class="el-upload__text">
+               {{ isUploading ? '正在分析...' : '拖拽 MP3 自动识别' }}
+            </div>
+          </el-upload>
+        </div>
+
+        <div class="playlist-area">
+  <div class="playlist-header">
+    <h3>我的歌单</h3>
+    <el-button circle size="small" icon="Plus" @click="handleAddPlaylist" />
+  </div>
+
+  <div class="playlist-list">
+    <div class="playlist-item" @click="fetchSongs">
+       <el-icon><Headset /></el-icon>
+       <span>所有歌曲</span>
+    </div>
+
+    <div
+        v-for="pl in myPlaylists"
+        :key="pl.id"
+        class="playlist-item"
+        :class="{ 'active-pl': currentPlaylist?.id === pl.id }"
+        @click="selectPlaylist(pl)"
+    >
+      <div class="pl-name">
+        <el-icon><List /></el-icon>
+        <span>{{ pl.title }}</span>
+      </div>
+
+      <el-icon class="del-pl-btn" @click="deletePlaylist(pl, $event)"><Delete /></el-icon>
+    </div>
+  </div>
+</div>
+
+      </el-aside>
+
+      <el-main class="glass-content">
+        <div class="content-header">
+          <h2>全站歌单 <el-tag effect="dark" round size="small">{{ getModeName() }}</el-tag></h2>
+
+          <div class="header-center">
+            <div class="search-wrapper" :class="{ 'active': isSearchActive }">
+              <div class="search-icon-btn" @click="isSearchActive = !isSearchActive">
+                  <el-icon :size="20"><Search /></el-icon>
+              </div>
+               <input
+                  v-model="searchQuery"
+                  class="search-input"
+                  type="text"
+                  placeholder="搜索歌名或歌手..."
+                />
+               <span v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">×</span>
+            </div>
+          </div>
+
+          <el-button circle icon="Refresh" @click="fetchSongs" class="refresh-btn" />
+        </div>
+
+        <div class="song-grid">
+           <div
+             v-for="song in filteredSongList"
+             :key="song.id"
+             class="song-card"
+             :class="{ 'active-card': currentSong.id === song.id }"
+             @click="playMusic(song)"
+             @contextmenu="openContextMenu($event, song)"
+           >
+            <div class="card-cover">
+              <div class="placeholder-cover"><el-icon size="40"><Headset /></el-icon></div>
+              <div class="play-overlay"><el-icon size="30"><VideoPlay /></el-icon></div>
+            </div>
+            <div class="card-info">
+              <div class="song-title">{{ song.title }}</div>
+              <div class="song-artist">{{ song.artist }}</div>
+            </div>
+<!--             <el-button-->
+<!--                 class="add-btn"-->
+<!--                 type="warning"-->
+<!--                 icon="FolderAdd"-->
+<!--                 circle-->
+<!--                 size="small"-->
+<!--                 @click.stop="openAddToPlaylist(song)"-->
+<!--             />-->
+<!--            <el-button class="delete-btn" type="danger" icon="Delete" circle size="small" @click.stop="deleteSong(song.id)" />-->
+           </div>
+
+           <div v-if="filteredSongList.length === 0" class="empty-state">
+              没有找到相关歌曲
+           </div>
+        </div>
+      </el-main>
+    </el-container>
+
+    <transition name="slide-up">
+      <div v-show="showLyricsPage" class="lyrics-overlay">
+        <div class="blur-bg" :style="{ backgroundImage: `url(${currentSong.cover_image || ''})` }"></div>
+
+        <div class="close-lyrics" @click="showLyricsPage = false">
+          <el-icon><ArrowDown /></el-icon>
+        </div>
+
+        <div class="lyrics-content-layout">
+          <div class="left-cover">
+             <div class="big-cover-box" :class="{ 'playing': isPlaying }">
+                <img v-if="currentSong.cover_image" :src="currentSong.cover_image" />
+                <div v-else class="placeholder-disc"><el-icon><Headset /></el-icon></div>
+             </div>
+             <div class="big-info">
+                <h2>{{ currentSong.title }}</h2>
+                <p>{{ currentSong.artist }}</p>
+             </div>
+          </div>
+
+          <div class="right-lyrics" ref="lyricsContainer">
+             <div v-if="parsedLyrics.length === 0" class="no-lyrics-text">暂无歌词</div>
+             <p
+               v-for="(line, index) in parsedLyrics"
+               :key="index"
+               class="lrc-line"
+               :class="{ 'active': currentLyricIndex === index }"
+             >
+               {{ line.text }}
+             </p>
+             <div style="height: 50vh;"></div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <div class="player-bar" v-if="currentSong.url">
+
+      <div class="player-info" @click="showLyricsPage = !showLyricsPage">
+        <div class="spinning-disc" :style="{ animationPlayState: isPlaying ? 'running' : 'paused' }"></div>
+        <div>
+          <div class="p-title">{{ currentSong.title }}</div>
+          <div class="p-artist">{{ currentSong.artist }}</div>
+        </div>
+        <el-icon class="expand-icon"><ArrowUp /></el-icon>
+      </div>
+      <div class="player-controls">
+        <el-button circle size="default" @click="prevSong" class="control-btn">
+          <el-icon :size="18"><ArrowLeft /></el-icon>
+        </el-button>
+
+        <el-button
+         circle
+         size="large"
+         type="primary"
+         @click="togglePlay"
+         class="play-btn"
+        >
+          <el-icon v-if="isPlaying" :size="28" color="#fff">
+            <VideoPause />
+          </el-icon>
+          <el-icon v-else :size="28" color="#fff">
+            <VideoPlay />
+          </el-icon>
+        </el-button>
+
+        <el-button circle size="default" @click="nextSong(true)" class="control-btn">
+          <el-icon :size="18"><ArrowRight /></el-icon>
+        </el-button>
+      </div>
+
+      <div class="player-actions">
+        <el-tooltip :content="getModeName()" placement="top">
+            <el-button
+                circle
+                size="default"
+                @click="toggleMode"
+                style="background: rgba(255,255,255,0.1); border: none;"
+            >
+                <el-icon :size="20" :color="getModeColor()">
+                  <Sort v-if="playMode === 'sequence'" />
+                  <Refresh v-else-if="playMode === 'loop'" />
+                  <Connection v-else-if="playMode === 'random'" />
+                </el-icon>
+            </el-button>
+        </el-tooltip>
+      </div>
+
+      <div class="progress-box">
+        <span class="time-text">{{ formatTime(currentTime) }}</span>
+        <el-slider
+          v-model="currentTime"
+          :max="duration"
+          @change="seekAudio"
+          @input="isDragging = true"
+          :show-tooltip="false"
+          size="small"
+        />
+        <span class="time-text">{{ formatTime(duration) }}</span>
+      </div>
+
+      <div class="volume-box">
+          <el-icon><Microphone /></el-icon>
+          <el-slider v-model="volume" :max="1" :step="0.01" @input="setVolume" style="width: 80px; margin-left: 10px"/>
+      </div>
+
+      <audio
+        ref="audioPlayer"
+        :src="currentSong.url"
+        autoplay
+        style="display: none;"
+        @play="isPlaying = true"
+        @pause="isPlaying = false"
+        @ended="autoNext"
+        @timeupdate="onTimeUpdate"
+        @loadedmetadata="onLoadedMetadata"
+      ></audio>
+
+    </div>
+        <el-dialog
+            v-model="showAddDialog"
+            title="收藏到歌单"
+            width="300px"
+            class="glass-dialog"
+            center
+        >
+          <div class="playlist-select-list">
+            <div
+                v-for="pl in myPlaylists"
+                :key="pl.id"
+                class="dialog-item"
+                @click="addToPlaylist(pl.id)"
+            >
+              <el-icon><List /></el-icon>
+              <span>{{ pl.title }}</span>
+            </div>
+            <div v-if="myPlaylists.length === 0" style="text-align:center; color:#999; padding:20px;">
+              暂无歌单，请先去左侧新建
+            </div>
+          </div>
+        </el-dialog>
+    <div
+        v-show="contextMenu.visible"
+        class="custom-context-menu"
+        :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
+        @click.stop
+    >
+      <div class="menu-header" v-if="contextMenu.song">
+        {{ contextMenu.song.title }}
+      </div>
+
+      <div class="menu-item" @click="playMusic(contextMenu.song); closeContextMenu()">
+        <el-icon><VideoPlay /></el-icon> 立即播放
+      </div>
+
+      <div class="menu-item" @click="openAddToPlaylist(contextMenu.song); closeContextMenu()">
+        <el-icon><FolderAdd /></el-icon> 收藏到歌单
+      </div>
+
+      <div class="menu-divider"></div>
+
+      <div class="menu-item" @click="nextSong(); closeContextMenu()">
+        <el-icon><ArrowRight /></el-icon> 切下一首
+      </div>
+
+      <div class="menu-divider"></div>
+
+      <div class="menu-item delete" @click="deleteSong(contextMenu.song.id); closeContextMenu()">
+        <el-icon><Delete /></el-icon> 删除歌曲
+      </div>
+    </div>
+
+  </div>

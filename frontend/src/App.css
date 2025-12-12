@@ -1,0 +1,538 @@
+/* 保持原有基础样式不变 */
+body { margin: 0; font-family: sans-serif; background-color: #121212; color: white; overflow: hidden; }
+.main-layout { position: relative; height: 100vh; width: 100vw; background: linear-gradient(135deg, #1e1e2e 0%, #2d2d42 100%); }
+.glass-sidebar { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(20px); border-right: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; display: flex; flex-direction: column; }
+.logo-area h2 { color: #fff; margin-bottom: 30px; text-align: center; background: linear-gradient(45deg, #ff6b6b, #f06595); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.upload-area h3 { color: rgba(255,255,255,0.7); font-size: 14px; margin-bottom: 15px; }
+.el-input__wrapper { background-color: rgba(0,0,0,0.2) !important; box-shadow: none !important; border: 1px solid rgba(255,255,255,0.1); }
+.el-input__inner { color: white !important; }
+.glass-content { padding: 30px; overflow-y: auto; padding-bottom: 100px; }
+.content-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.song-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; }
+.song-card { background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 15px; cursor: pointer; transition: all 0.3s ease; position: relative; }
+.song-card:hover { background: rgba(255, 255, 255, 0.1); transform: translateY(-5px); }
+
+/* 🔥 高亮当前播放的卡片 */
+.active-card { border: 1px solid #ff9966; background: rgba(255, 153, 102, 0.1); }
+
+.card-cover { width: 100%; aspect-ratio: 1/1; background: linear-gradient(120deg, #84fab0 0%, #8fd3f4 100%); border-radius: 8px; margin-bottom: 10px; position: relative; display: flex; align-items: center; justify-content: center; }
+.play-overlay { position: absolute; opacity: 0; transition: opacity 0.3s; }
+.song-card:hover .play-overlay { opacity: 1; }
+.song-title { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px; }
+.song-artist { font-size: 12px; color: rgba(255,255,255,0.6); }
+.delete-btn { position: absolute; top: 5px; right: 5px; opacity: 0; transition: opacity 0.2s; }
+.song-card:hover .delete-btn { opacity: 1; }
+
+/* 底部播放条样式更新 */
+.player-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 80px; background: rgba(30, 30, 46, 0.9); backdrop-filter: blur(15px); border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; padding: 0 30px; z-index: 1000; box-sizing: border-box; }
+.player-info { width: 200px; display: flex; align-items: center; }
+.spinning-disc { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(to right, #ff9966, #ff5e62); margin-right: 15px; animation: spin 3s linear infinite; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.p-title { font-weight: bold; font-size: 14px; }
+.p-artist { font-size: 12px; color: #aaa; }
+.custom-audio { flex: 1; height: 40px; outline: none; margin-left: 20px; }
+/* 进度条区域 */
+.progress-box {
+  flex: 1; /* 占据剩余空间 */
+  display: flex;
+  align-items: center;
+  margin: 0 20px;
+}
+.time-text {
+  font-size: 12px;
+  color: #ccc;
+  width: 40px;
+  text-align: center;
+  margin: 0 10px;
+}
+/* 音量区域 */
+.volume-box {
+    display: flex;
+    align-items: center;
+    margin-right: 20px;
+}
+/* 覆盖 Element Slider 默认样式，让它更细更精致（可选） */
+.el-slider__bar {
+    background-color: #ff9966; /* 你的主题橙色 */
+}
+.el-slider__button {
+    border-color: #ff9966;
+}
+/* 播放控制按钮区 */
+.control-btn {
+  background: rgba(255, 255, 255, 0.1) !important; /* 强制半透明背景 */
+  border: none !important;
+  color: #fff !important; /* 强制图标白色 */
+  transition: all 0.2s;
+}
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.1);
+}
+
+.player-controls { margin: 0 20px; display: flex; align-items: center; gap: 15px; } /* 增加了 gap 间距 */
+.player-actions { margin-right: 20px; }
+.play-btn {
+  background: linear-gradient(135deg, #1f1f2e, #1f1f2f) !important;
+  border: none !important;
+  transform: scale(1.2); /* 让它比旁边的稍微大一点 */
+  margin: 0 15px; /* 给左右留点距离 */
+  box-shadow: 0 4px 10px rgb(40, 40, 59);
+}
+.play-btn:active {
+  transform: scale(1.1); /* 点击时的按压效果 */
+}
+
+/* 认证界面 */
+.auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); z-index: 2000; display: flex; justify-content: center; align-items: center; }
+.auth-box { width: 350px; background: rgba(30, 30, 40, 0.9); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 40px; text-align: center; }
+.auth-box h2 { color: white; margin-bottom: 30px; }
+.auth-btn { width: 100%; margin-top: 10px; }
+.toggle-text { margin-top: 20px; color: #aaa; font-size: 14px; }
+.toggle-text span { color: #409EFF; cursor: pointer; margin-left: 5px; }
+.user-info { text-align: center; color: rgba(255,255,255,0.6); margin-bottom: 20px; }
+
+/* --- 🔍 顶部搜索框样式 --- */
+
+/* 让头部布局变成：左(标题)-中(搜索)-右(刷新) */
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  position: relative; /* 只要相对定位即可 */
+}
+
+/* 中间区域容器 */
+.header-center {
+  flex: 1;
+  display: flex;
+  justify-content: center; /* 居中显示 */
+}
+
+/* 搜索条外壳：初始状态是一个圆形的图标按钮大小 */
+.search-wrapper {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 5px;
+  width: 40px; /* 初始宽度只有图标宽 */
+  height: 40px;
+  transition: all 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28); /* 弹性动画 */
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+
+/* 激活状态：变宽 */
+.search-wrapper.active {
+  width: 300px; /* 展开后的宽度 */
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+/* 搜索图标 */
+.search-icon-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  flex-shrink: 0; /* 防止被压缩 */
+}
+
+/* 输入框：隐藏原生样式 */
+.search-input {
+  background: transparent;
+  border: none;
+  color: white;
+  outline: none;
+  font-size: 14px;
+  margin-left: 10px;
+  width: 100%;
+  opacity: 0; /* 没展开时隐藏文字 */
+  transition: opacity 0.3s ease;
+}
+
+/* 展开时显示输入框 */
+.search-wrapper.active .search-input {
+  opacity: 1;
+}
+
+/* 占位符颜色 */
+.search-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+/* 清除按钮 */
+.clear-btn {
+  color: #999;
+  cursor: pointer;
+  padding: 0 8px;
+  font-size: 18px;
+}
+.clear-btn:hover { color: white; }
+
+/* 空状态提示 */
+.empty-state {
+  grid-column: 1 / -1; /* 跨越所有列 */
+  text-align: center;
+  color: rgba(255,255,255,0.4);
+  padding: 50px;
+}
+
+/* 刷新按钮样式优化 */
+.refresh-btn {
+  background: rgb(69, 158, 34) !important; /* 半透明背景 */
+  border: 1px solid rgba(19, 221, 52, 0.1) !important; /* 淡淡的边框 */
+  color: #ef3e09 !important; /* 图标白色 */
+  transition: all 0.3s;
+  margin-left: 15px; /* 给左边的搜索框留点距离 */
+}
+
+.refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important; /* 悬停稍微变亮 */
+  transform: rotate(360deg); /* 🌟 增加一个旋转动画，更有趣 */
+}
+
+/* src/App.vue <style> */
+
+/* --- 🎵 底部触发区域优化 --- */
+.player-info {
+  width: 200px;
+  display: flex;
+  align-items: center;
+  cursor: pointer; /* 变手指 */
+  transition: opacity 0.3s;
+  position: relative;
+}
+.player-info:hover {
+  opacity: 0.8;
+}
+.expand-icon {
+  margin-left: 10px;
+  opacity: 0;
+  transition: all 0.3s;
+  transform: translateY(5px);
+}
+.player-info:hover .expand-icon {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+
+/* --- 🎤 全屏歌词遮罩层样式 --- */
+.lyrics-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: calc(100vh - 80px); /* 留出底部播放条的高度 */
+  background: #1e1e2e;
+  z-index: 900; /* 在播放条下面，但在列表上面 */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 动态背景 */
+.blur-bg {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(60px) brightness(0.4);
+  z-index: -1;
+  transition: background-image 0.5s ease;
+}
+
+/* 关闭按钮 */
+.close-lyrics {
+  position: absolute;
+  top: 20px;
+  left: 30px;
+  cursor: pointer;
+  z-index: 10;
+  padding: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  transition: all 0.3s;
+}
+.close-lyrics:hover {
+  background: rgba(255,255,255,0.2);
+  transform: rotate(180deg);
+}
+
+/* 布局：左右分栏 */
+.lyrics-content-layout {
+  display: flex;
+  height: 100%;
+  padding-top: 60px; /* 避开关闭按钮 */
+}
+
+/* 左侧封面区 */
+.left-cover {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.big-cover-box {
+  width: 350px;
+  height: 350px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 0 30px rgba(0,0,0,0.5);
+  border: 8px solid rgba(255,255,255,0.1);
+  animation: spin 20s linear infinite; /* 旋转 */
+  animation-play-state: paused;
+}
+.big-cover-box.playing {
+  animation-play-state: running;
+}
+.big-cover-box img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.placeholder-disc {
+  width: 100%; height: 100%;
+  background: #333;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 80px; color: #555;
+}
+.big-info {
+  margin-top: 40px;
+  text-align: center;
+}
+.big-info h2 { font-size: 32px; margin-bottom: 10px; }
+.big-info p { font-size: 18px; color: #aaa; }
+
+
+/* 右侧歌词区 */
+.right-lyrics {
+  flex: 1;
+  overflow-y: auto;
+  text-align: center;
+  padding: 20px 0;
+  mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 85%, transparent 100%);
+  scrollbar-width: none;
+}
+.right-lyrics::-webkit-scrollbar { display: none; }
+
+.lrc-line {
+  color: rgba(255,255,255,0.4);
+  font-size: 16px;
+  margin: 24px 0;
+  transition: all 0.4s ease;
+  cursor: default;
+}
+.lrc-line.active {
+  color: #fff;
+  font-size: 28px;
+  font-weight: bold;
+  text-shadow: 0 0 20px rgba(255,255,255,0.6);
+}
+
+/* 进出场动画 (Slide Up) */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  transform: translateY(100%); /* 默认藏在屏幕下面 */
+}
+/* --- 🎵 侧边栏歌单样式 --- */
+.playlist-area {
+  margin-top: 30px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  padding-top: 20px;
+}
+
+.playlist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+.playlist-header h3 {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(255,255,255,0.6);
+}
+
+.playlist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: rgba(255,255,255,0.8);
+  font-size: 14px;
+}
+.playlist-item:hover {
+  background: rgba(255,255,255,0.1);
+  color: white;
+}
+.playlist-item .el-icon {
+  margin-right: 10px;
+  font-size: 16px;
+}
+
+/* --- ➕ 收藏按钮与弹窗样式 --- */
+
+/* 1. 收藏按钮位置 (在卡片左上角，或者并在删除按钮旁边) */
+.add-btn {
+  position: absolute;
+  top: 5px;
+  right: 40px; /* 放在删除按钮(right:5px)的左边 */
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 10;
+}
+.song-card:hover .add-btn {
+  opacity: 1;
+}
+
+/* 2. 弹窗列表样式 */
+.playlist-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dialog-item {
+  padding: 12px;
+  background: rgba(0,0,0,0.05);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+  color: #333; /* 弹窗默认是白底黑字，这里用深色文字 */
+}
+.dialog-item:hover {
+  background: #ff9966; /* 悬停变橙色 */
+  color: white;
+}
+.dialog-item .el-icon {
+  margin-right: 10px;
+}
+
+/* (可选) 强制弹窗变为暗黑风格，如果你想的话 */
+.glass-dialog {
+  background: #2d2d42 !important;
+}
+.glass-dialog .el-dialog__title {
+  color: white !important;
+}
+
+/* 歌单列表项布局优化 */
+.playlist-item {
+  display: flex;
+  justify-content: space-between; /*以此把名字和删除按钮撑开*/
+  align-items: center;
+  /* ...原有的 padding 等样式保留... */
+}
+
+/* 高亮当前选中的歌单 */
+.active-pl {
+  background: rgba(255, 153, 102, 0.2) !important;
+  color: #ff9966 !important;
+  border-left: 3px solid #ff9966;
+}
+
+.pl-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 删除图标默认隐藏 */
+.del-pl-btn {
+  opacity: 0;
+  transition: opacity 0.2s;
+  color: #ff4d4f;
+  padding: 5px;
+}
+.del-pl-btn:hover {
+  background: rgba(255, 77, 79, 0.2);
+  border-radius: 4px;
+}
+
+/* 鼠标悬停在整行时，显示删除图标 */
+.playlist-item:hover .del-pl-btn {
+  opacity: 1;
+}
+
+/* --- 🖱️ 右键菜单样式 --- */
+.custom-context-menu {
+  position: fixed;
+  z-index: 9999; /* 必须极高，盖住所有东西 */
+  background: rgba(40, 40, 50, 0.95);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  padding: 5px 0;
+  min-width: 160px;
+  animation: fadeIn 0.1s ease-out;
+}
+
+.menu-header {
+  padding: 8px 15px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.4);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  margin-bottom: 5px;
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-item {
+  padding: 10px 15px;
+  font-size: 14px;
+  color: #eee;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: background 0.2s;
+}
+
+.menu-item:hover {
+  background: #ff9966; /* 悬停变橙色 */
+  color: white;
+}
+
+.menu-item .el-icon {
+  margin-right: 10px;
+  font-size: 16px;
+}
+
+.menu-item.delete:hover {
+  background: #ff4d4f; /* 删除项悬停变红 */
+}
+
+.menu-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.1);
+  margin: 5px 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
