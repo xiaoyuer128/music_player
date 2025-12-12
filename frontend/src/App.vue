@@ -367,6 +367,53 @@ const contextMenu = ref({
   song: null
 })
 
+// --- ✏️ 编辑歌曲逻辑 (新增) ---
+const showEditDialog = ref(false)
+const editForm = ref({ id: null, title: '', artist: '', coverFile: null })
+
+// 1. 打开编辑窗口 (从右键菜单触发)
+const openEditDialog = (song) => {
+  editForm.value = {
+    id: song.id,
+    title: song.title,
+    artist: song.artist,
+    coverFile: null // 重置文件
+  }
+  showEditDialog.value = true
+}
+
+// 2. 监听文件选择 (封面图)
+const handleEditFileChange = (uploadFile) => {
+  editForm.value.coverFile = uploadFile.raw
+}
+
+// 3. 提交修改
+const submitEdit = async () => {
+  try {
+    const formData = new FormData()
+    if (editForm.value.title) formData.append('title', editForm.value.title)
+    if (editForm.value.artist) formData.append('artist', editForm.value.artist)
+    if (editForm.value.coverFile) formData.append('cover', editForm.value.coverFile)
+
+    await axios.patch(`/songs/${editForm.value.id}`, formData)
+
+    ElMessage.success('修改成功')
+    showEditDialog.value = false
+    fetchSongs() // 刷新列表看效果
+
+    // 如果正在放这首歌，顺便更新一下播放器显示的文字
+    if (currentSong.value.id === editForm.value.id) {
+        currentSong.value.title = editForm.value.title
+        currentSong.value.artist = editForm.value.artist
+        // 封面图因为有缓存，可能不会立马变，暂时忽略
+    }
+  } catch (e) {
+    ElMessage.error('修改失败')
+  }
+}
+
+
+
 // 1. 打开右键菜单
 const openContextMenu = (e, song) => {
   e.preventDefault() // 阻止浏览器默认菜单

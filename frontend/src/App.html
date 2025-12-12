@@ -31,7 +31,7 @@
     </div>
 
     <el-container style="height: 100vh;" v-else>
-      <el-aside width="250px" class="glass-sidebar">
+      <el-aside width="20vw" class="glass-sidebar">
         <div class="logo-area">
           <h2>🎧 小鱼儿音乐</h2>
           <div class="user-info">
@@ -64,10 +64,12 @@
   </div>
 
   <div class="playlist-list">
-    <div class="playlist-item" @click="fetchSongs">
-       <el-icon><Headset /></el-icon>
-       <span>所有歌曲</span>
-    </div>
+      <div class="playlist-item" @click="fetchSongs">
+          <div class="pl-name">
+              <el-icon><Headset /></el-icon>
+              <span>所有歌曲</span>
+          </div>
+      </div>
 
     <div
         v-for="pl in myPlaylists"
@@ -292,29 +294,72 @@
         :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }"
         @click.stop
     >
-      <div class="menu-header" v-if="contextMenu.song">
-        {{ contextMenu.song.title }}
-      </div>
+        <div class="menu-header" v-if="contextMenu.song">
+            {{ contextMenu.song.title }}
+        </div>
 
-      <div class="menu-item" @click="playMusic(contextMenu.song); closeContextMenu()">
-        <el-icon><VideoPlay /></el-icon> 立即播放
-      </div>
+        <div class="menu-item" @click="openAddToPlaylist(contextMenu.song); closeContextMenu()">
+            <el-icon><FolderAdd /></el-icon> 收藏到歌单
+        </div>
+        <div class="menu-item" @click="openEditDialog(contextMenu.song); closeContextMenu()">
+            <el-icon><Edit /></el-icon> 编辑信息
+        </div>
 
-      <div class="menu-item" @click="openAddToPlaylist(contextMenu.song); closeContextMenu()">
-        <el-icon><FolderAdd /></el-icon> 收藏到歌单
-      </div>
+        <div class="menu-divider"></div>
+        <div class="menu-item" @click="playMusic(contextMenu.song); closeContextMenu()">
+            <el-icon><VideoPlay /></el-icon> 立即播放
+        </div>
 
-      <div class="menu-divider"></div>
+        <div class="menu-item" @click="openAddToPlaylist(contextMenu.song); closeContextMenu()">
+            <el-icon><FolderAdd /></el-icon> 收藏到歌
+        </div>
 
-      <div class="menu-item" @click="nextSong(); closeContextMenu()">
-        <el-icon><ArrowRight /></el-icon> 切下一首
-      </div>
+        <div class="menu-divider"></div>
 
-      <div class="menu-divider"></div>
+        <div class="menu-item" @click="nextSong(); closeContextMenu()">
+            <el-icon><ArrowRight /></el-icon> 切下一首
+        </div>
 
-      <div class="menu-item delete" @click="deleteSong(contextMenu.song.id); closeContextMenu()">
-        <el-icon><Delete /></el-icon> 删除歌曲
-      </div>
+        <div class="menu-divider"></div>
+
+        <div class="menu-item delete" @click="deleteSong(contextMenu.song.id); closeContextMenu()">
+            <el-icon><Delete /></el-icon> 删除歌曲
+        </div>
     </div>
+      <el-dialog
+              v-model="showEditDialog"
+              title="编辑歌曲信息"
+              width="400px"
+              class="glass-dialog"
+              center
+      >
+          <el-form label-position="top">
+              <el-form-item label="歌名">
+                  <el-input v-model="editForm.title" />
+              </el-form-item>
+              <el-form-item label="歌手">
+                  <el-input v-model="editForm.artist" />
+              </el-form-item>
+              <el-form-item label="更换封面 (可选)">
+                  <el-upload
+                          class="cover-uploader"
+                          action=""
+                          :auto-upload="false"
+                          :show-file-list="true" :limit="1"
+                          :on-change="handleEditFileChange"
+                          list-type="picture"
+                  >
+                      <el-button type="primary" size="small">点击选择图片</el-button>
+                      <template #tip>
+                          <div class="el-upload__tip">只能上传 jpg/png 文件</div>
+                      </template>
+                  </el-upload>
+              </el-form-item>
+          </el-form>
 
+          <template #footer>
+              <el-button @click="showEditDialog = false">取消</el-button>
+              <el-button type="primary" @click="submitEdit">保存修改</el-button>
+          </template>
+      </el-dialog>
   </div>

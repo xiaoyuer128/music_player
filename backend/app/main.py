@@ -392,3 +392,49 @@ async def remove_song_from_playlist(
     return {"ok": True}
 
 
+# --- ✏️ 编辑歌曲接口 (新增) ---
+
+@app.patch("/songs/{song_id}")
+async def update_song(
+        song_id: int,
+        title: str = Form(None),  # 允许为空，为空就不改
+        artist: str = Form(None),
+        cover: UploadFile = File(None),  # 允许上传新封面
+        session: Session = Depends(get_session),
+        current_user: User = Depends(get_current_user)
+):
+    # 1. 找歌
+    song = session.get(Song, song_id)
+    if not song:
+        raise HTTPException(status_code=404, detail="歌曲不存在")
+
+    # 2. 验证权限
+    if song.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="你没有权限修改这首歌")
+
+    # 3. 更新文本字段
+    if title:
+        song.title = title
+    if artist:
+        song.artist = artist
+
+    # 4. 如果上传了新封面，处理图片保存
+    if cover:
+        # 生成随机文件名
+        file_ext = cover.filename.split(".")[-1]
+        cover_filename = f"{uuid4()}.{file_ext}"
+        cover_path = os.path.join(COVER_DIR, cover_filename)
+
+        # 保存文件
+        with open(cover_path, "wb") as buffer:
+            shutil.copyfileobj(cover.file, buffer)
+
+        # 更新数据库路径
+        song.cover_image = f"/{COVER_DIR}/{cover_filename}"
+
+    # 5. 提交保存
+    session.add(song)
+    session.commit()
+    session.refresh(song)
+
+    return song
